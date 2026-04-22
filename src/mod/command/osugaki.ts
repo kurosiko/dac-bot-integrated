@@ -4,7 +4,7 @@ import { fetchVocabulary } from "../api";
 const osugaki: CommandModule = {
   data: {
     name: "osugaki",
-    description: "osugaki will talk",
+    description: "開発中(というか機能案ぼしゅーちゅう)",
     options: [
       {
         name: "category",

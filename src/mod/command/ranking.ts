@@ -4,7 +4,7 @@ import { fetchRanking } from "../api";
 const ranking: CommandModule = {
   data: {
     name: "ranking",
-    description: "Botの使用回数ランキングを表示します",
+    description: "Botの使用回数ランキングを表示します(WARN メンションが飛びます)",
     options: [
       {
         name: "type",

@@ -5,11 +5,11 @@ import { getMesugakiBatouSuffix, getMesugakiWakaraseSuffix } from "../flavor";
 const mesugaki: CommandModule = {
   data: {
     name: "mesugaki",
-    description: "",
+    description: "メスガキがしゃべります",
     options: [
       {
         name: "category",
-        description: "choose category",
+        description: "どっちですか",
         type: 3,  
         required: true,
         choices: [

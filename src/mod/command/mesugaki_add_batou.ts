@@ -4,11 +4,11 @@ import { addVocabulary } from "../api";
 const mesugakiAddBatou: CommandModule = {
   data: {
     name: "mesugaki_add_batou",
-    description: "メスガキ語彙マシマシ(罵倒)",
+    description: "メスガキ語彙マシマシ(batou)",
     options: [
       {
         name: "word",
-        description: "追加する言葉",
+        description: "[here]",
         type: 3,
         required: true
       }
@@ -24,8 +24,12 @@ const mesugakiAddBatou: CommandModule = {
     if (!success) {
       return { type: 4, data: { content: "Failed to add vocabulary", flags: 64 } }; 
     }
-
-    return { type: 4, data: { content: `Added mesugaki (batou) vocabulary\nWord: \`${wordOption.value}\``, flags: 64 } };
+    //e.g. 「ぬるぽ」ね♡ 新しい言葉、アタシが覚えててあげる♡
+    return {
+      type: 4, data: {
+        content: `「\`${wordOption.value}\`」ね♡新しい言葉、アタシが覚えててあげる♡`, flags: 64
+      }
+    };
   },
 }
 

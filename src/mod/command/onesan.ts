@@ -1,15 +1,15 @@
 import type { CommandModule } from "../mod.d.ts";
 import { fetchVocabulary } from "../api";
-import { getOnesanPrefix, getOnesanSuffix } from "../flavor";
+import { generateHeart, getOnesanPrefix, getOnesanSuffix } from "../flavor";
 
 const onesan: CommandModule = {
   data: {
-    name: "onesan",
-    description: "onesan will talk",
+    name: "sexy",
+    description: "激エロおねぇさんが喋ります",
     options: [
       {
         name: "suffix",
-        description: "choose suffix",
+        description: "うっふ〜ん♡[content]♡[here]",
         type: 3, 
         required: false,
         choices: [
@@ -33,7 +33,7 @@ const onesan: CommandModule = {
 
     const prefix = getOnesanPrefix();
     const suffix = getOnesanSuffix(suffixChoice);
-    return { type: 4, data: { content: `${prefix}${word}${suffix}` } };
+    return { type: 4, data: { content: `${prefix}${word}${generateHeart()}${suffix}` } };
   },
 }
 
