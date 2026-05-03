@@ -4,11 +4,7 @@ import { addVocabulary } from "../api";
 const osugakiAddWakarase: CommandModule = {
   data: {
     name: "osugaki_add_wakarase",
-<<<<<<< HEAD
     description: "開発中",
-=======
-    description: "開発中(というか機能案ぼしゅーちゅう)",
->>>>>>> 8aab1198f913dc7da4e292e3c713762a68cc447a
     options: [
       {
         name: "word",

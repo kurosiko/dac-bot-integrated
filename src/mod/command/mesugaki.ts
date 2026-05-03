@@ -9,11 +9,7 @@ const mesugaki: CommandModule = {
     options: [
       {
         name: "category",
-<<<<<<< HEAD
         description: "どっちをご所望で？",
-=======
-        description: "どっちですか",
->>>>>>> 8aab1198f913dc7da4e292e3c713762a68cc447a
         type: 3,  
         required: true,
         choices: [
