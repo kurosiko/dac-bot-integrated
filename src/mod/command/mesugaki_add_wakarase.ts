@@ -4,11 +4,11 @@ import { addVocabulary } from "../api";
 const mesugakiAddWakarase: CommandModule = {
   data: {
     name: "mesugaki_add_wakarase",
-    description: "メスガキ語彙マシマシ(わからせ)",
+    description: "メスガキ語彙マシマシ(wakarase)",
     options: [
       {
         name: "word",
-        description: "追加する言葉",
+        description: "[here]ぉぉお♡",
         type: 3,
         required: true
       }
@@ -25,7 +25,7 @@ const mesugakiAddWakarase: CommandModule = {
       return { type: 4, data: { content: "Failed to add vocabulary", flags: 64 } }; 
     }
 
-    return { type: 4, data: { content: `Added mesugaki (wakarase) vocabulary\nWord: \`${wordOption.value}\``, flags: 64 } };
+    return { type: 4, data: { content: `「\`${wordOption.value}\`」ね♡新しい言葉、アタシが覚えててあげる♡`, flags: 64 } };
   },
 }
 

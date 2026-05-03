@@ -5,11 +5,11 @@ import { getOnesanPrefix, getOnesanSuffix } from "../flavor";
 const onesan: CommandModule = {
   data: {
     name: "onesan",
-    description: "onesan will talk",
+    description: "うっふ～～ん♡します",
     options: [
       {
-        name: "suffix",
-        description: "choose suffix",
+        name: "語尾指定",
+        description: "語尾を選択します",
         type: 3, 
         required: false,
         choices: [

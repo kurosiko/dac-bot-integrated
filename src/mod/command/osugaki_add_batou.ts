@@ -4,7 +4,7 @@ import { addVocabulary } from "../api";
 const osugakiAddBatou: CommandModule = {
   data: {
     name: "osugaki_add_batou",
-    description: "オスガキ（罵倒）の語彙を追加します",
+    description: "開発中",
     options: [
       {
         name: "word",

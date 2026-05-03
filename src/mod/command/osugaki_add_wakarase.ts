@@ -4,7 +4,7 @@ import { addVocabulary } from "../api";
 const osugakiAddWakarase: CommandModule = {
   data: {
     name: "osugaki_add_wakarase",
-    description: "オスガキ（わからせ）の語彙を追加します",
+    description: "開発中",
     options: [
       {
         name: "word",
