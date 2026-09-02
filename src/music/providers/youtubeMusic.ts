@@ -49,10 +49,13 @@ function collectByKey(value: unknown, key: string, out: unknown[] = []): unknown
 
 function findWatchEndpoint(value: unknown): JsonObject | undefined {
   const endpoints = collectByKey(value, "watchEndpoint");
+  let fallback: JsonObject | undefined;
   for (const endpoint of endpoints) {
-    if (isObject(endpoint) && typeof endpoint.videoId === "string") return endpoint;
+    if (!isObject(endpoint) || typeof endpoint.videoId !== "string") continue;
+    fallback ??= endpoint;
+    if (musicVideoType(endpoint)) return endpoint;
   }
-  return undefined;
+  return fallback;
 }
 
 function musicVideoType(endpoint: JsonObject | undefined): string | undefined {
