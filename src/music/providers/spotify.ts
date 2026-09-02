@@ -4,6 +4,20 @@ import { scoreTrackMatch } from "../matcher";
 
 const TRACK_ID = /^[A-Za-z0-9]{22}$/;
 const SEARCH_TRACKS_HASH = "bc1ca2fcd0ba1013a0fc88e6cc4f190af501851e3dafd3e1ef85840297694428";
+const SPOTIFY_TOTP_SECRET = "GM3TMMJTGYZTQNZVGM4DINJZHA4TGOBYGMZTCMRTGEYDSMJRHE4TEOBUG4YTCMRUGQ4DQOJUGQYTAMRRGA2TCMJSHE3TCMBY";
+const SPOTIFY_TOTP_VERSION = 61;
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36";
+
+type UnknownObject = Record<string, unknown>;
+
+interface SpotifyWebSession {
+  accessToken: string;
+  clientToken?: string;
+  expiresAt: number;
+}
+
+let sessionPromise: Promise<SpotifyWebSession | null> | null = null;
+let cachedSession: SpotifyWebSession | null = null;
 
 export function spotifyTrackId(raw: string): string | null {
   let url: URL;
@@ -57,13 +71,206 @@ async function fetchPublicPageMetadata(canonical: string): Promise<{ artist?: st
   try {
     const response = await fetch(canonical, {
       redirect: "error",
-      headers: { accept: "text/html,application/xhtml+xml" },
+      headers: { accept: "text/html,application/xhtml+xml", "user-agent": USER_AGENT },
     });
     if (!response.ok) return {};
     const html = await response.text();
     return { artist: parseArtistFromHtml(html) };
   } catch {
     return {};
+  }
+}
+
+function isObject(value: unknown): value is UnknownObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function base32Decode(input: string): Uint8Array {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const char of input.replace(/=+$/g, "").toUpperCase()) {
+    const value = alphabet.indexOf(char);
+    if (value < 0) continue;
+    bits += value.toString(2).padStart(5, "0");
+  }
+  const out = new Uint8Array(Math.floor(bits.length / 8));
+  for (let i = 0; i < out.length; i += 1) {
+    out[i] = Number.parseInt(bits.slice(i * 8, i * 8 + 8), 2);
+  }
+  return out;
+}
+
+async function spotifyTotp(nowMs = Date.now()): Promise<string> {
+  const counter = BigInt(Math.floor(nowMs / 1000 / 30));
+  const message = new Uint8Array(8);
+  let value = counter;
+  for (let i = 7; i >= 0; i -= 1) {
+    message[i] = Number(value & 0xffn);
+    value >>= 8n;
+  }
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    base32Decode(SPOTIFY_TOTP_SECRET),
+    { name: "HMAC", hash: "SHA-1" },
+    false,
+    ["sign"],
+  );
+  const signature = new Uint8Array(await crypto.subtle.sign("HMAC", key, message));
+  const offset = signature[signature.length - 1] & 0x0f;
+  const code = (
+    ((signature[offset] & 0x7f) << 24)
+    | (signature[offset + 1] << 16)
+    | (signature[offset + 2] << 8)
+    | signature[offset + 3]
+  ) % 1_000_000;
+  return code.toString().padStart(6, "0");
+}
+
+async function fetchSpotifyRootConfig(): Promise<{ clientVersion?: string }> {
+  try {
+    const response = await fetch("https://open.spotify.com/", {
+      redirect: "error",
+      headers: { accept: "text/html", "user-agent": USER_AGENT },
+    });
+    if (!response.ok) return {};
+    const html = await response.text();
+    const encoded = html.match(/<script id="appServerConfig" type="text\/plain">([^<]+)<\/script>/i)?.[1];
+    if (!encoded) return {};
+    const decoded = atob(encoded);
+    const config = JSON.parse(decoded) as { clientVersion?: string };
+    return { clientVersion: config.clientVersion };
+  } catch {
+    return {};
+  }
+}
+
+async function fetchAccessToken(): Promise<{ accessToken: string; clientId?: string; expiresAt: number } | null> {
+  const legacy = new URL("https://open.spotify.com/get_access_token");
+  legacy.searchParams.set("reason", "transport");
+  legacy.searchParams.set("productType", "web_player");
+
+  try {
+    const response = await fetch(legacy.toString(), {
+      redirect: "error",
+      headers: { accept: "application/json", "user-agent": USER_AGENT },
+    });
+    if (response.ok) {
+      const data = await response.json() as {
+        accessToken?: string;
+        clientId?: string;
+        accessTokenExpirationTimestampMs?: number;
+      };
+      if (data.accessToken) {
+        return {
+          accessToken: data.accessToken,
+          clientId: data.clientId,
+          expiresAt: data.accessTokenExpirationTimestampMs ?? Date.now() + 55 * 60_000,
+        };
+      }
+    }
+  } catch {
+    // Newer web player deployments use /api/token with a TOTP challenge.
+  }
+
+  for (const offsetMs of [0, -30_000, 30_000]) {
+    try {
+      const code = await spotifyTotp(Date.now() + offsetMs);
+      const endpoint = new URL("https://open.spotify.com/api/token");
+      endpoint.searchParams.set("reason", "init");
+      endpoint.searchParams.set("productType", "web-player");
+      endpoint.searchParams.set("totp", code);
+      endpoint.searchParams.set("totpVer", String(SPOTIFY_TOTP_VERSION));
+      endpoint.searchParams.set("totpServer", code);
+
+      const response = await fetch(endpoint.toString(), {
+        redirect: "error",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json;charset=UTF-8",
+          "user-agent": USER_AGENT,
+        },
+      });
+      if (!response.ok) continue;
+      const data = await response.json() as {
+        accessToken?: string;
+        clientId?: string;
+        accessTokenExpirationTimestampMs?: number;
+      };
+      if (data.accessToken) {
+        return {
+          accessToken: data.accessToken,
+          clientId: data.clientId,
+          expiresAt: data.accessTokenExpirationTimestampMs ?? Date.now() + 55 * 60_000,
+        };
+      }
+    } catch {
+      // Try the adjacent 30 second TOTP window.
+    }
+  }
+  return null;
+}
+
+async function fetchClientToken(
+  clientId: string | undefined,
+  clientVersion: string | undefined,
+): Promise<string | undefined> {
+  if (!clientId || !clientVersion) return undefined;
+  try {
+    const response = await fetch("https://clienttoken.spotify.com/v1/clienttoken", {
+      method: "POST",
+      redirect: "error",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        "user-agent": USER_AGENT,
+      },
+      body: JSON.stringify({
+        client_data: {
+          client_version: clientVersion,
+          client_id: clientId,
+          js_sdk_data: {
+            device_brand: "unknown",
+            device_model: "unknown",
+            os: "windows",
+            os_version: "NT 10.0",
+            device_id: crypto.randomUUID().replace(/-/g, ""),
+            device_type: "computer",
+          },
+        },
+      }),
+    });
+    if (!response.ok) return undefined;
+    const data = await response.json() as {
+      response_type?: string;
+      granted_token?: { token?: string };
+    };
+    return data.granted_token?.token;
+  } catch {
+    return undefined;
+  }
+}
+
+async function getSpotifyWebSession(): Promise<SpotifyWebSession | null> {
+  if (cachedSession && cachedSession.expiresAt - 30_000 > Date.now()) return cachedSession;
+  if (sessionPromise) return await sessionPromise;
+
+  sessionPromise = (async () => {
+    const [access, root] = await Promise.all([fetchAccessToken(), fetchSpotifyRootConfig()]);
+    if (!access) return null;
+    const clientToken = await fetchClientToken(access.clientId, root.clientVersion);
+    return {
+      accessToken: access.accessToken,
+      clientToken,
+      expiresAt: access.expiresAt,
+    };
+  })();
+
+  try {
+    cachedSession = await sessionPromise;
+    return cachedSession;
+  } finally {
+    sessionPromise = null;
   }
 }
 
@@ -76,7 +283,7 @@ export async function resolveSpotify(raw: string): Promise<{ track: MusicTrack; 
   oembed.searchParams.set("url", canonical);
 
   const [oembedResponse, publicMetadata] = await Promise.all([
-    fetch(oembed.toString(), { redirect: "error" }),
+    fetch(oembed.toString(), { redirect: "error", headers: { "user-agent": USER_AGENT } }),
     fetchPublicPageMetadata(canonical),
   ]);
 
@@ -108,12 +315,6 @@ export async function resolveSpotify(raw: string): Promise<{ track: MusicTrack; 
   };
 }
 
-type UnknownObject = Record<string, unknown>;
-
-function isObject(value: unknown): value is UnknownObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function collectTrackObjects(value: unknown, out: UnknownObject[] = []): UnknownObject[] {
   if (Array.isArray(value)) {
     for (const item of value) collectTrackObjects(item, out);
@@ -122,14 +323,18 @@ function collectTrackObjects(value: unknown, out: UnknownObject[] = []): Unknown
   if (!isObject(value)) return out;
 
   const uri = typeof value.uri === "string" ? value.uri : undefined;
-  if (uri?.startsWith("spotify:track:") && typeof value.name === "string") out.push(value);
+  const id = typeof value.id === "string" ? value.id : undefined;
+  if ((uri?.startsWith("spotify:track:") || TRACK_ID.test(id ?? "")) && typeof value.name === "string") {
+    out.push(value);
+  }
   for (const child of Object.values(value)) collectTrackObjects(child, out);
   return out;
 }
 
 function spotifyCandidateFromObject(value: UnknownObject): { track: MusicTrack; id: string } | null {
   const uri = typeof value.uri === "string" ? value.uri : "";
-  const id = uri.startsWith("spotify:track:") ? uri.slice("spotify:track:".length) : "";
+  const directId = typeof value.id === "string" ? value.id : "";
+  const id = uri.startsWith("spotify:track:") ? uri.slice("spotify:track:".length) : directId;
   if (!TRACK_ID.test(id) || typeof value.name !== "string") return null;
 
   const artists: Array<{ name: string }> = [];
@@ -141,9 +346,17 @@ function spotifyCandidateFromObject(value: UnknownObject): { track: MusicTrack; 
     if (profile && typeof profile.name === "string") artists.push({ name: profile.name });
   }
 
-  const albumObj = isObject(value.album) ? value.album : null;
+  const albumObj = isObject(value.album)
+    ? value.album
+    : isObject(value.albumOfTrack)
+      ? value.albumOfTrack
+      : null;
   const album = albumObj && typeof albumObj.name === "string" ? { name: albumObj.name } : undefined;
-  const durationObj = isObject(value.duration) ? value.duration : null;
+  const durationObj = isObject(value.duration)
+    ? value.duration
+    : isObject(value.trackDuration)
+      ? value.trackDuration
+      : null;
   const duration = durationObj && typeof durationObj.totalMilliseconds === "number"
     ? durationObj.totalMilliseconds
     : undefined;
@@ -159,26 +372,11 @@ function spotifyCandidateFromObject(value: UnknownObject): { track: MusicTrack; 
   };
 }
 
-async function getAnonymousSpotifyToken(): Promise<string | null> {
-  const endpoint = new URL("https://open.spotify.com/get_access_token");
-  endpoint.searchParams.set("reason", "transport");
-  endpoint.searchParams.set("productType", "web_player");
-  try {
-    const response = await fetch(endpoint.toString(), {
-      redirect: "error",
-      headers: { accept: "application/json" },
-    });
-    if (!response.ok) return null;
-    const data = await response.json() as { accessToken?: string };
-    return data.accessToken ?? null;
-  } catch {
-    return null;
-  }
-}
-
-export async function searchSpotify(track: MusicTrack): Promise<{ track: MusicTrack; link: ServiceLink } | null> {
-  const token = await getAnonymousSpotifyToken();
-  if (!token) return null;
+export async function searchSpotify(
+  track: MusicTrack,
+): Promise<{ track: MusicTrack; link: ServiceLink } | null> {
+  const session = await getSpotifyWebSession();
+  if (!session) return null;
 
   const query = [track.artists[0]?.name, track.title].filter(Boolean).join(" ");
   const endpoint = new URL("https://api-partner.spotify.com/pathfinder/v1/query");
@@ -195,18 +393,19 @@ export async function searchSpotify(track: MusicTrack): Promise<{ track: MusicTr
     persistedQuery: { version: 1, sha256Hash: SEARCH_TRACKS_HASH },
   }));
 
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    authorization: `Bearer ${session.accessToken}`,
+    "app-platform": "WebPlayer",
+    origin: "https://open.spotify.com",
+    referer: "https://open.spotify.com/",
+    "user-agent": USER_AGENT,
+  };
+  if (session.clientToken) headers["client-token"] = session.clientToken;
+
   let response: Response;
   try {
-    response = await fetch(endpoint.toString(), {
-      redirect: "error",
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${token}`,
-        "app-platform": "WebPlayer",
-        origin: "https://open.spotify.com",
-        referer: "https://open.spotify.com/",
-      },
-    });
+    response = await fetch(endpoint.toString(), { redirect: "error", headers });
   } catch {
     return null;
   }
