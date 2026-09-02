@@ -9,15 +9,17 @@ A Discord Slash Command bot built with **Hono** and **Cloudflare Workers**, feat
 - **Character-based Interactions**: Includes various character modes like "Onesan", "Mesugaki", and "Osugaki".
 - **Dynamic Vocabulary**: Commands to add and fetch vocabulary directly from a Cloudflare D1 database.
 - **Ranking System**: Tracks and displays usage statistics per user and model.
-- **REST API**: Vocabulary management via HTTP API endpoints.
+- **Music Link Resolver**: Resolves Spotify / YouTube Music / YouTube links for the same recording.
+- **REST API**: Vocabulary management and music-link resolution via HTTP API endpoints.
 - **Cloudflare Native**: Fully optimized for Cloudflare Workers and D1.
 
 ## Project Structure
 
 - `src/index.ts`: Main entry point. Handles Discord interaction webhooks and provides REST API endpoints.
 - `src/mod/command/`: Individual command modules. Each file defines a slash command's metadata and execution logic.
-- `src/handler/`: REST API handler functions for database operations (Fetch, Post, Delete, Ranking).
-- `src/mod/`: Discord command implementations (mesugaki, osugaki, onesan, ranking, etc.).
+- `src/handler/`: REST API handler functions for database operations and music resolution.
+- `src/music/`: Music resolver, matching/normalization logic, cache, and provider integrations.
+- `src/mod/`: Discord command implementations (mesugaki, osugaki, onesan, ranking, music, etc.).
 - `src/util.ts`: Core database utility functions.
 - `src/register.ts`: Utility script to register slash commands with the Discord API.
 - `schema.sql`: D1 database schema.
@@ -188,6 +190,28 @@ GET /ranking?type=onesan
 - `500`: Query failed or internal error
 
 ---
+    
+### `GET /music`
+
+Resolve a Spotify, YouTube Music, or YouTube track URL into the canonical links for the same recording.
+
+**Query Parameters**
+
+| Param | Type | Required | Description |
+|------|------|----------|-------------|
+| `url` | string | **Yes** | Spotify Track, YouTube Music Song, or YouTube video URL |
+
+**Example Request**
+
+```
+GET /music?url=https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl
+```
+
+The response contains normalized `track` metadata, the original `source`, and `links.spotify`, `links.youtube_music` (ATV / Song), and `links.youtube` (OMV). A service may be `null` when a sufficiently reliable match is unavailable. Each resolved link includes `confidence` and `match_method`.
+
+The resolver uses a 24-hour D1 cache. Provider failures that affect only one target service are returned as partial results with entries in `warnings`.
+
+---
 
 ## Discord Integration
 
@@ -208,6 +232,7 @@ Handles Discord slash command interactions. Receives POST requests from Discord 
 | `/osugaki_add_wakarase` | Add an osugaki wakarase phrase |
 | `/onesan_add` | Add an onesan phrase |
 | `/ranking` | Show usage rankings |
+| `/music` | Resolve a Spotify / YouTube Music / YouTube track URL across services |
 
 **Environment Variables (Discord)**
 
@@ -344,6 +369,16 @@ CREATE TABLE IF NOT EXISTS usages (
     count INTEGER DEFAULT 0,
     PRIMARY KEY (user_id, type)
 );
+
+CREATE TABLE IF NOT EXISTS music_cache (
+    key TEXT PRIMARY KEY,
+    response TEXT NOT NULL,
+    resolved_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_music_cache_expires_at
+    ON music_cache (expires_at);
 ```
 
 ## License

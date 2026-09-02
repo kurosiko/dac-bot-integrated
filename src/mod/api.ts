@@ -1,16 +1,18 @@
-import { 
-  getVocabulary, 
-  getRanking, 
-  addVocabulary as addVocabularyDB, 
-  convertDB 
+import {
+  getVocabulary,
+  getRanking,
+  addVocabulary as addVocabularyDB,
+  convertDB,
 } from "../util";
+import { resolveMusicCached } from "../music/cache";
+import type { MusicResolveResult } from "../music/types";
 
 export async function fetchVocabulary(
   type_str: string,
   category: string | null | undefined,
   user_id: string | null | undefined,
   db: any,
-  executionCtx?: any
+  executionCtx?: any,
 ): Promise<string | null> {
   const type = convertDB(type_str);
   const result = await getVocabulary(db, type, category, 1, user_id, executionCtx);
@@ -22,8 +24,8 @@ export async function fetchVocabulary(
 
 export async function fetchRanking(
   type_str: string | null | undefined,
-  db: any
-): Promise<{ user_id: string, count: number }[]> {
+  db: any,
+): Promise<{ user_id: string; count: number }[]> {
   const type = convertDB(type_str || "");
   const result = await getRanking(db, type);
   return (result.results as any) || [];
@@ -33,9 +35,24 @@ export async function addVocabulary(
   type_str: string,
   word: string,
   category: string | null | undefined,
-  db: any
+  db: any,
 ): Promise<boolean> {
   const type = convertDB(type_str);
   const result = await addVocabularyDB(db, word, type, category);
   return !!result.success;
+}
+
+export async function fetchMusic(
+  url: string,
+  db?: D1Database,
+  executionCtx?: ExecutionContext,
+): Promise<{ ok: true; data: MusicResolveResult } | { ok: false; error: string }> {
+  try {
+    return { ok: true, data: await resolveMusicCached(url, db, executionCtx) };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }

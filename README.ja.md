@@ -9,14 +9,16 @@
 - **キャラクターベースのインタラクション**: 「おねえさん」「メスガキ」「オスガキ」などの様々なモードを搭載。
 - **動的な語彙管理**: Cloudflare D1 データベースから語彙を直接追加・取得。
 - **ランキングシステム**: ユーザーおよびモデルごとの使用統計を追跡・表示。
-- **REST API**: HTTP API エンドポイントによる語彙管理。
+- **Music Link Resolver**: Spotify / YouTube Music / YouTube の同一楽曲リンクを相互解決。
+- **REST API**: HTTP API エンドポイントによる語彙管理と楽曲リンク解決。
 - **Cloudflare ネイティブ**: Cloudflare Workers と D1 に完全に最適化されています。
 
 ## プロジェクト構造
 
 - `src/index.ts`: メインエントリーポイント。Discord インタラクションの受信と REST API エンドポイントを提供。
 - `src/mod/command/`: 個別コマンドモジュール（mesugaki, osugaki, onesan, ranking など）。
-- `src/handler/`: REST API ハンドラー（DB 取得、登録、削除、ランキング）。
+- `src/handler/`: REST API ハンドラー（DB 取得、登録、削除、ランキング、楽曲リンク解決）。
+- `src/music/`: Music Resolver、正規化・マッチング、D1 キャッシュ、各 Provider 実装。
 - `src/util.ts`: コアデータベースユーティリティ関数。
 - `src/register.ts`: Discord API にスラッシュコマンドを登録するスクリプト。
 - `schema.sql`: D1 データベーススキーマ。
@@ -168,6 +170,28 @@ GET /ranking?type=onesan
 
 ---
 
+### `GET /music`
+
+Spotify / YouTube Music / YouTube の楽曲 URL を受け取り、同じ Recording に対応する各サービスのリンクを解決します。
+
+**クエリパラメータ**
+
+| パラメータ | 型 | 必須 | 説明 |
+|-----------|----|------|------|
+| `url` | string | **必須** | Spotify Track / YouTube Music Song / YouTube 動画 URL |
+
+**リクエスト例**
+
+```
+GET /music?url=https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl
+```
+
+レスポンスには正規化された `track`、入力元の `source`、`links.spotify`、`links.youtube_music`（ATV / Song）、`links.youtube`（OMV）を含みます。十分な確度で特定できないサービスは `null` になります。解決済みリンクには `confidence` と `match_method` が付きます。
+
+Resolver の結果は D1 に 24 時間キャッシュします。一部 Provider のみ失敗した場合は、取得できたリンクを返しつつ `warnings` に理由を格納します。
+
+---
+
 ## Discord 連携
 
 ### `POST /` (Discord インタラクションエンドポイント)
@@ -187,6 +211,7 @@ Discord スラッシュコマンドのインタラクションを処理します
 | `/osugaki_add_wakarase` | オスガキわからせフレーズを追加 |
 | `/onesan_add` | おねえさんフレーズを追加 |
 | `/ranking` | 使用回数ランキングを表示 |
+| `/music` | Spotify / YouTube Music / YouTube の楽曲リンクを相互解決 |
 
 **環境変数 (Discord)**
 
@@ -284,6 +309,16 @@ CREATE TABLE IF NOT EXISTS usages (
     count INTEGER DEFAULT 0,
     PRIMARY KEY (user_id, type)
 );
+
+CREATE TABLE IF NOT EXISTS music_cache (
+    key TEXT PRIMARY KEY,
+    response TEXT NOT NULL,
+    resolved_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_music_cache_expires_at
+    ON music_cache (expires_at);
 ```
 
 ## ライセンス

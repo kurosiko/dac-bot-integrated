@@ -7,6 +7,7 @@ import mesugakiAddWakarase from "./mod/command/mesugaki_add_wakarase";
 import osugakiAddBatou from "./mod/command/osugaki_add_batou";
 import osugakiAddWakarase from "./mod/command/osugaki_add_wakarase";
 import ranking from "./mod/command/ranking";
+import music from "./mod/command/music";
 
 const commands = [
   onesan.data,
@@ -18,6 +19,7 @@ const commands = [
   osugakiAddBatou.data,
   osugakiAddWakarase.data,
   ranking.data,
+  music.data,
 ];
 
 const token = process.env.API_TOKEN;
@@ -30,7 +32,7 @@ if (!token || !applicationId) {
 }
 
 const globalUrl = `https://discord.com/api/v10/applications/${applicationId}/commands`;
-const url = guildId 
+const url = guildId
   ? `https://discord.com/api/v10/applications/${applicationId}/guilds/${guildId}/commands`
   : globalUrl;
 
@@ -40,7 +42,7 @@ try {
     const globalResponse = await fetch(globalUrl, {
       headers: { Authorization: `Bot ${token}` },
     });
-    
+
     if (globalResponse.ok) {
       const globalCommands = await globalResponse.json() as any[];
       if (globalCommands.length > 0) {
