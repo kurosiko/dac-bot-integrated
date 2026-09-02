@@ -4,7 +4,7 @@ import {
   addVocabulary as addVocabularyDB,
   convertDB,
 } from "../util";
-import { resolveMusicUrl } from "../music/resolver";
+import { resolveMusicCached } from "../music/cache";
 import type { MusicResolveResult } from "../music/types";
 
 export async function fetchVocabulary(
@@ -44,9 +44,11 @@ export async function addVocabulary(
 
 export async function fetchMusic(
   url: string,
+  db?: D1Database,
+  executionCtx?: ExecutionContext,
 ): Promise<{ ok: true; data: MusicResolveResult } | { ok: false; error: string }> {
   try {
-    return { ok: true, data: await resolveMusicUrl(url) };
+    return { ok: true, data: await resolveMusicCached(url, db, executionCtx) };
   } catch (error) {
     return {
       ok: false,

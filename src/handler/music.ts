@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { resolveMusicUrl } from "../music/resolver";
+import { resolveMusicCached } from "../music/cache";
 import { MusicResolverError } from "../music/types";
 
 export async function music_resolve(c: Context<{ Bindings: CloudflareBindings }>): Promise<Response> {
@@ -9,7 +9,7 @@ export async function music_resolve(c: Context<{ Bindings: CloudflareBindings }>
   }
 
   try {
-    return c.json(await resolveMusicUrl(url));
+    return c.json(await resolveMusicCached(url, c.env.DB, c.executionCtx));
   } catch (error) {
     if (error instanceof MusicResolverError) {
       const status = error.code === "INVALID_PARAMETERS" || error.code === "UNSUPPORTED_URL"

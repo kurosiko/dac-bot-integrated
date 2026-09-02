@@ -14,12 +14,12 @@ const music: CommandModule = {
       },
     ],
   },
-  execute: async (interaction: any) => {
+  execute: async (interaction: any, env: any, executionCtx?: ExecutionContext) => {
     const options = interaction.data?.options || [];
     const url = options.find((option: any) => option.name === "url")?.value;
     if (!url) return { type: 4, data: { content: "URLを指定してください" } };
 
-    const result = await fetchMusic(url);
+    const result = await fetchMusic(url, env.DB, executionCtx);
     if (!result.ok) {
       return { type: 4, data: { content: `Music resolver error: ${result.error}` } };
     }
