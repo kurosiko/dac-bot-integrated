@@ -16,6 +16,7 @@ import mesugakiAddWakarase from "./mod/command/mesugaki_add_wakarase";
 import osugakiAddBatou from "./mod/command/osugaki_add_batou";
 import osugakiAddWakarase from "./mod/command/osugaki_add_wakarase";
 import ranking from "./mod/command/ranking";
+import lyric from "./mod/command/lyric";
 import { db_fetch } from "./handler/db_fetch";
 import { db_delete } from "./handler/db_delete";
 import { db_post } from "./handler/db_post";
@@ -36,6 +37,7 @@ const commands = new Map<string, CommandModule>([
   [osugakiAddBatou.data.name, osugakiAddBatou],
   [osugakiAddWakarase.data.name, osugakiAddWakarase],
   [ranking.data.name, ranking],
+  [lyric.data.name, lyric],
 ]);
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -47,8 +49,6 @@ app.onError((err, c) => {
 app.notFound((c) => {
   return c.json({ message: "Not Found" }, 404);
 });
-
-
 
 app.get("/", (c) => {
   return c.text("dac-bot-mod-integrated with discord-interaction api");
@@ -70,12 +70,6 @@ app.delete("/vocabulary/:id", async (c) => {
   return await db_delete(c);
 });
 
-
-
-
-
-
-
 app.post("/", async (c) => {
   const signature = c.req.header("x-signature-ed25519");
   const timestamp = c.req.header("x-signature-timestamp");
@@ -86,7 +80,7 @@ app.post("/", async (c) => {
   }
 
   const isValidRequest = await verifyKey(body, signature, timestamp, c.env.DISCORD_PUBLIC_KEY);
-  
+
   if (!isValidRequest) {
     return c.text("Verifing key was faild", 401);
   }
