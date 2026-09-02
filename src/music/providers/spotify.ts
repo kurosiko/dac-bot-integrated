@@ -28,8 +28,11 @@ export function spotifyTrackId(raw: string): string | null {
   }
   if (url.hostname.toLowerCase() !== "open.spotify.com") return null;
   const parts = url.pathname.split("/").filter(Boolean);
-  if (parts[0] !== "track" || !parts[1] || !TRACK_ID.test(parts[1])) return null;
-  return parts[1];
+  const trackIndex = parts[0]?.startsWith("intl-") ? 1 : 0;
+  if (parts[trackIndex] !== "track" || !parts[trackIndex + 1] || !TRACK_ID.test(parts[trackIndex + 1])) {
+    return null;
+  }
+  return parts[trackIndex + 1];
 }
 
 function decodeHtml(value: string): string {
@@ -324,9 +327,12 @@ function collectTrackObjects(value: unknown, out: UnknownObject[] = []): Unknown
 
   const uri = typeof value.uri === "string" ? value.uri : undefined;
   const id = typeof value.id === "string" ? value.id : undefined;
-  if ((uri?.startsWith("spotify:track:") || TRACK_ID.test(id ?? "")) && typeof value.name === "string") {
-    out.push(value);
-  }
+  const hasTrackShape = isObject(value.artists)
+    && (isObject(value.duration) || isObject(value.trackDuration) || isObject(value.albumOfTrack));
+  const isTrack = uri
+    ? uri.startsWith("spotify:track:")
+    : TRACK_ID.test(id ?? "") && hasTrackShape;
+  if (isTrack && typeof value.name === "string") out.push(value);
   for (const child of Object.values(value)) collectTrackObjects(child, out);
   return out;
 }
