@@ -16,6 +16,7 @@ import mesugakiAddWakarase from "./mod/command/mesugaki_add_wakarase";
 import osugakiAddBatou from "./mod/command/osugaki_add_batou";
 import osugakiAddWakarase from "./mod/command/osugaki_add_wakarase";
 import ranking from "./mod/command/ranking";
+import music from "./mod/command/music";
 import { db_fetch } from "./handler/db_fetch";
 import { db_delete } from "./handler/db_delete";
 import { db_post } from "./handler/db_post";
@@ -37,6 +38,7 @@ const commands = new Map<string, CommandModule>([
   [osugakiAddBatou.data.name, osugakiAddBatou],
   [osugakiAddWakarase.data.name, osugakiAddWakarase],
   [ranking.data.name, ranking],
+  [music.data.name, music],
 ]);
 
 const app = new Hono<{ Bindings: Bindings }>();
